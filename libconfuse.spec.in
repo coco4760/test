@@ -25,33 +25,31 @@ Summary:			A library for parsing configuration files
 Name:				%{_name}
 Version:			%{_version}
 Release:			%{_release}
-Source:			http://www.e.kth.se/~e97_mhe/libConfuse/%{_srcname}-%{_version}.tar.gz
-URL:				http://www.e.kth.se/~e97_mhe/confuse.shtml
+Source:			http://savannah.nongnu.org/download/confuse//%{_srcname}-%{_version}.tar.gz
+URL:				http://www.nongnu.org/confuse/
 Group:			%{_group}
 Packager:		Pascal Bleser <guru@unixtech.be>
-Copyright:		LGPL
+License:		ISC
 BuildRoot:		%{_tmppath}/build-%{_name}-%{_version}
+BuildRequires:     xmlto doxygen
 Prefix:			%{_prefix}
 %if %_has_distro
 Distribution:  %_distribution
 %endif
 
 %description
-libConfuse is a configuration file parser library, licensed under the
-terms of the LGPL, and written in C. It supports sections and (lists
-of) values (strings, integers, floats, booleans or other sections), as
-well as some other features (such as single/double-quoted strings,
-environment variable expansion, functions and nested include
-statements).
+libConfuse is a configuration file parser library written in C.
+It supports sections and (lists of) values (strings, integers,
+floats, booleans or other sections), as well as some other features
+(such as single/double-quoted strings, environment variable expansion,
+functions and nested include statements).
 
-It makes it very easy to add configuration file capability to a
-program using a simple API. The goal of libConfuse is not to be *the*
-configuration file parser library with a gazillion of features.
-Instead, it aims to be easy to use and quick to integrate with your
-code.
+It makes it easy to add configuration file capability to a
+program using a simple API. LibConfuse aims to be easy to use and
+quick to integrate with your code.
 
 %package devel
-Summary:			Development Environment for %{_name}
+Summary:		Development Environment for %{_name}
 Group:			%{_group}
 Requires:		%{_name} = %{_version}
 
@@ -62,6 +60,8 @@ Documentation and examples can be found in %{_pkgdoc}/doc
 and %{_pkgdoc}/examples respectively.
 
 %changelog
+* Fri May 21 2004 Martin Hedenfalk <mhe@home.se> 2.3-%{_rel}suse%{_suse_vernum}
+- New upstream version, updated URLs
 * Sat Apr 05 2003 Martin Hedenfalk <mhe@home.se> 2.0-%{_rel}suse%{_suse_vernum}
 - removed doxygen dependence as pre-built documentation are now included
 * Fri Mar 28 2003 Pascal Bleser <guru@unixtech.be> 1.2.3-%{_rel}suse%{_suse_vernum}
@@ -70,7 +70,6 @@ and %{_pkgdoc}/examples respectively.
 %prep
 %setup -q -n "%{_srcname}-%{_version}"
 CFLAGS="${RPM_OPT_FLAGS}" \
-CXXFLAGS="${RPM_OPT_FLAGS}" \
 ./configure \
 	--prefix="%{_prefix}" \
 	--enable-shared
@@ -89,7 +88,7 @@ cp -R doc/man/* "${RPM_BUILD_ROOT}%{_mandir}/"
 
 %{__mkdir_p} "${RPM_BUILD_ROOT}%{_pkgdoc}"
 echo -n > _rpm_doc_files_
-for f in ABOUT-NLS AUTHORS COPYING NEWS README; do
+for f in AUTHORS LICENSE ChangeLog.md README.md; do
 	%{__cp} "$f" "${RPM_BUILD_ROOT}%{_pkgdoc}/$f"
 	echo "%doc %{_pkgdoc}/$f" >> _rpm_doc_files_
 done
@@ -124,7 +123,3 @@ echo Updating dynamic linker cache...
 %{_libdir}/lib*.so
 %doc %{_mandir}/man*/*
 
-# Local Variables:
-# mode: rpm-spec
-# tab-width: 3
-# End:
