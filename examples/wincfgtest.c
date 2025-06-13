@@ -16,11 +16,11 @@
 
 int cb_message(cfg_t *cfg, cfg_opt_t *opt, int argc, const char **argv)
 {
-	if(argc != 1)
-		MessageBox(0, "message() requires only 1 argument", "message() function", MB_OK);
-	else
-		MessageBox(0, argv[0], "message() function", MB_OK);
-	return 0;
+    if(argc != 1)
+        MessageBox(0, "message() requires only 1 argument", "message() function", MB_OK);
+    else
+        MessageBox(0, argv[0], "message() function", MB_OK);
+    return 0;
 }
 
 static void display_last_error(void)
@@ -50,25 +50,24 @@ typedef double (*CFG_GETFLOAT_FPTR)(cfg_t *cfg, const char *name);
 
 int main(void)
 {
-	cfg_opt_t opts[] = {
-		CFG_BOOL("bool", cfg_false, 0),
-		CFG_STR("string", "default test string", 0),
-		CFG_INT("number", 17, 0),
-		CFG_FLOAT("float", 6.789, 0),
-		CFG_FUNC("message", &cb_message),
-		CFG_END()
-	};
-	cfg_t *cfg;
+    cfg_opt_t opts[] = {
+        CFG_BOOL("bool", cfg_false, 0),
+        CFG_STR("string", "default test string", 0),
+        CFG_INT("number", 17, 0),
+        CFG_FLOAT("float", 6.789, 0),
+        CFG_FUNC("message", &cb_message),
+        CFG_END()
+    };
     HINSTANCE hinstLib;
     char buf[1024];
 
-	CFG_INIT_FPTR cfg_init;
-	CFG_PARSE_FPTR cfg_parse;
-	CFG_FREE_FPTR cfg_free;
-	CFG_GETBOOL_FPTR cfg_getbool;
-	CFG_GETINT_FPTR cfg_getint;
-	CFG_GETSTR_FPTR cfg_getstr;
-	CFG_GETFLOAT_FPTR cfg_getfloat;
+    CFG_INIT_FPTR cfg_init;
+    CFG_PARSE_FPTR cfg_parse;
+    CFG_FREE_FPTR cfg_free;
+    CFG_GETBOOL_FPTR cfg_getbool;
+    CFG_GETINT_FPTR cfg_getint;
+    CFG_GETSTR_FPTR cfg_getstr;
+    CFG_GETFLOAT_FPTR cfg_getfloat;
 
     /* Get a handle to the DLL module. */
     hinstLib = LoadLibrary("libConfuse");
@@ -84,11 +83,11 @@ int main(void)
         cfg_getfloat = (CFG_GETFLOAT_FPTR)GetProcAddress(hinstLib, DLLSYM("cfg_getfloat"));
 
         if(cfg_init) { /* assume the other functions also are valid */
-            cfg = cfg_init(opts, 0);
+            cfg_t *cfg = cfg_init(opts, 0);
             if(cfg_parse(cfg, "wincfgtest.conf") == CFG_FILE_ERROR)
-				perror("wincfgtest.conf");
+                perror("wincfgtest.conf");
 
-           	sprintf(buf, "bool:    %s\nstring:  %s\nnumber:  %ld\nfloat:   %lf\n",
+           	sprintf(buf, "bool:    %s\nstring:  %s\nnumber:  %ld\nfloat:   %f\n",
             	cfg_getbool(cfg, "bool") ? "true" : "false", cfg_getstr(cfg, "string"),
              	cfg_getint(cfg, "number"), cfg_getfloat(cfg, "float"));
            	MessageBox(NULL, buf, "libConfuse", MB_OK);
