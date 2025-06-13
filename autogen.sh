@@ -1,20 +1,5 @@
 #!/bin/sh
+# (Re)Generate configure script and all build related files for i18n
 
-echo -n "Running aclocal..."
-aclocal || exit
-echo " done"
+autoreconf -W portability -vism --force >/dev/null
 
-echo -n "Running autoheader..."
-autoheader || exit
-echo " done"
-
-echo -n "Running autoconf..."
-autoconf || exit
-echo " done"
-
-echo -n "Running automake..."
-automake || exit
-echo " done"
-
-echo "Running configure $*..."
-./configure $*

@@ -1,58 +1,101 @@
 ## Process this file with automake to produce Makefile.in
-## $Id$
 
-#AUTOMAKE_OPTIONS = foreign
-CLEANFILES=*~ \#*\#
-EXTRA_DIST=Doxyfile.in Doxyfile libconfuse.spec.in libconfuse.spec
-SUBDIRS = m4 po src examples
+ACLOCAL_AMFLAGS  = -I m4
+CLEANFILES       = *~ '\#*\#'
+pkgconfigdir     = $(libdir)/pkgconfig
+pkgconfig_DATA   = libconfuse.pc
+doc_DATA         = README.md AUTHORS LICENSE ChangeLog.md
+EXTRA_DIST       = README.md LICENSE ChangeLog.md libconfuse.spec.in libconfuse.spec
 
-doc: doc/html/index.html
-doc/html/index.html: src/confuse.h
-	doxygen
+EXAMPLES         =
+if ENABLE_EXAMPLES
+  EXAMPLES      += examples
+endif
+SUBDIRS          = m4 po src $(EXAMPLES) tests doc
 
-celan: clean
+## Windows build files, for ZIP archive
+BORLAND_FILES         = cfgtest.bpf cfgtest.bpr config.h confuse.bpg libConfuse.bpf libConfuse.bpr
+DEVCPP_FILES          = cfgtest.dev config.h libConfuse.dev
+MSVC6_FILES           = config.h libConfuse.dsp libConfuse.dsw unistd.h
+MSVS_FILES            = config.h msvs.net.sln unistd.h
+MSVS_CFGTEST_FILES    = cfgtest.vcproj
+MSVS_LIBCONFUSE_FILES = libConfuse.vcproj
+MINGW_FILES           = build.bat config.h Makefile
 
-ACLOCAL_AMFLAGS = -I m4
+add-windows-files:
+	@mkdir $(distdir)/windows
+	@mkdir $(distdir)/windows/borland
+	@mkdir $(distdir)/windows/devcpp
+	@mkdir $(distdir)/windows/msvc6
+	@mkdir $(distdir)/windows/msvc6/libConfuse
+	@mkdir $(distdir)/windows/msvs.net
+	@mkdir $(distdir)/windows/msvs.net/cfgtest
+	@mkdir $(distdir)/windows/msvs.net/libConfuse
+	@mkdir $(distdir)/windows/mingw
+	@for f in $(BORLAND_FILES); do \
+		cp -f $(top_srcdir)/windows/borland/$$f $(distdir)/windows/borland/; done
+	@for f in $(DEVCPP_FILES); do \
+		cp -f $(top_srcdir)/windows/devcpp/$$f $(distdir)/windows/devcpp/; done
+	@for f in $(MSVS_FILES); do \
+		cp -f $(top_srcdir)/windows/msvs.net/$$f $(distdir)/windows/msvs.net/; done
+	@for f in $(MSVS_CFGTEST_FILES); do \
+		cp -f $(top_srcdir)/windows/msvs.net/cfgtest/$$f $(distdir)/windows/msvs.net/cfgtest/; done
+	@for f in $(MSVS_LIBCONFUSE_FILES); do \
+	   cp -f $(top_srcdir)/windows/msvs.net/libConfuse/$$f $(distdir)/windows/msvs.net/libConfuse; done
+	@for f in $(MSVC6_FILES); do \
+	   cp -f $(top_srcdir)/windows/msvc6/libConfuse/$$f $(distdir)/windows/msvc6/libConfuse; done
+	@for f in $(MINGW_FILES); do \
+	   cp -f $(top_srcdir)/windows/mingw/$$f $(distdir)/windows/mingw; done
+	@cp $(top_srcdir)/examples/wincfgtest.c $(distdir)/examples
+	@cp $(top_srcdir)/examples/wincfgtest.conf $(distdir)/examples
+	@cp $(top_srcdir)/examples/wincfgtest.dev $(distdir)/examples
 
-BCB_FILES=README.txt cfgtest.bpf cfgtest.bpr config.h libConfuse.bpf \
-  libConfuse.bpr test.conf wincfgtest.bpf wincfgtest.bpr wincfgtest.conf
-DEV_CPP_FILES=cfgtest.dev config.h libConfuse.dev test.conf
-MSVC_CFGTEST_FILES=cfgtest.ncb cfgtest.sln cfgtest.vcproj test.conf
-MSVC_LIBCONFUSE_FILES=config.h libConfuse.sln libConfuse.vcproj
-MSVC_WINCFGTEST_FILES=wincfgtest.conf wincfgtest.sln wincfgtest.vcproj
-DOC_FILES=doxygen-footer.html doxygen-header.html doxygen.css
-DOC_HTML_FILES=annotated.html confuse_8h.html examples.html globals.html \
-  simple_8c-example.html unioncfg__value__t.html cfgtest_8c-example.html \
-  doxygen.css files.html index.html structcfg__opt__t.html \
-  confuse_8h-source.html doxygen.png functions.html reread_8c-example.html \
-  structcfg__t.html
-DOC_MAN_MAN3_FILES=cfg_opt_t.3 cfg_t.3 cfg_value_t.3 confuse.h.3
+unpack:
+	@tar xfz $(distdir).tar.gz
 
-dist-hook: doc
-	mkdir $(distdir)/BCB
-	mkdir $(distdir)/dev-cpp
-	mkdir $(distdir)/msvc
-	mkdir $(distdir)/msvc/cfgtest
-	mkdir $(distdir)/msvc/libConfuse
-	mkdir $(distdir)/msvc/wincfgtest
-	mkdir $(distdir)/doc
-	mkdir $(distdir)/doc/html
-	mkdir $(distdir)/doc/man
-	mkdir $(distdir)/doc/man/man3
+zip: dist unpack add-windows-files
+	@rm -f $(distdir).zip
+	@zip -qr $(distdir).zip $(distdir)
+	@rm -rf $(distdir)
 
-	for f in $(BCB_FILES); do cp -f $(top_srcdir)/BCB/$$f $(distdir)/BCB/; done
-	for f in $(DEV_CPP_FILES); do \
-		cp -f $(top_srcdir)/dev-cpp/$$f $(distdir)/dev-cpp/; done
-	for f in $(MSVC_CFGTEST_FILES); do \
-		cp -f $(top_srcdir)/msvc/cfgtest/$$f $(distdir)/msvc/cfgtest/; done
-	for f in $(MSVC_LIBCONFUSE_FILES); do \
-	   cp -f $(top_srcdir)/msvc/libConfuse/$$f $(distdir)/msvc/libConfuse; done
-	for f in $(MSVC_WINCFGTEST_FILES); do \
-	   cp -f $(top_srcdir)/msvc/wincfgtest/$$f $(distdir)/msvc/wincfgtest; done
+rpm: Makefile
+	@$(MAKE) dist
+	@rpmbuild -ta --clean $(distdir).tar.gz
 
-	for f in $(DOC_FILES); do \
-		cp -f $(top_srcdir)/doc/$$f $(distdir)/doc/; done
-	for f in $(DOC_HTML_FILES); do \
-		cp -f $(top_srcdir)/doc/html/$$f $(distdir)/doc/html/; done
-	for f in $(DOC_MAN_MAN3_FILES); do \
-		cp -f $(top_srcdir)/doc/man/man3/$$f $(distdir)/doc/man/man3/; done
+## ZIP files are reserved for the Windows distribution of libConfuse
+dist-zip: zip
+
+## Generate MD5 checksum file
+MD5 = md5sum
+md5-dist:
+	@for file in $(DIST_ARCHIVES) $(distdir).zip; do	\
+		$(MD5) $$file > $$file.md5;			\
+	done
+
+## Check if tagged in git
+release-hook:
+	@if [ ! `git tag | grep v$(PACKAGE_VERSION)` ]; then				\
+		echo;									\
+		printf "\e[1m\e[41mCannot find release tag v$(PACKAGE_VERSION)\e[0m\n";	\
+		printf "\e[1m\e[5mDo release anyway?\e[0m "; read yorn;			\
+		if [ "$$yorn" != "y" -a "$$yorn" != "Y" ]; then				\
+			printf "OK, aborting release.\n";				\
+			exit 1;								\
+		fi;									\
+		echo;									\
+	else										\
+		echo;									\
+		printf "\e[1m\e[42mFound GIT release tag v$(PACKAGE_VERSION)\e[0m\n";	\
+		printf "\e[1m\e[44m>>Remember to push tags!\e[0m\n";			\
+		echo;									\
+	fi
+
+## Target to run when building a release
+release: release-hook distcheck dist-zip md5-dist
+	@echo
+	@echo "Resulting release files:"
+	@echo "================================================================="
+	@for file in $(DIST_ARCHIVES) $(distdir).zip; do				\
+		printf "%-32s Distribution tarball\n" $$file;				\
+		printf "%-32s " $$file.md5; cat $$file.md5 | cut -f1 -d' ';		\
+	done
