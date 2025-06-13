@@ -1,0 +1,15 @@
+Nginx安全性分析
+
+影响版本：0.5.6-1.13.2
+
+漏洞危害：敏感信息泄露
+
+HTTP-Range
+
+HTTP的Range 允许客户端分批次请求资源的一部分，如果服务端资源较大，可以通过Range来并发下载;如果访问资源时网络中断，可以断点续传。
+
+Range 设置在HTTP请求头中，它是多个byte-range-spec(或suffix-byte-range-spec)的集合。
+
+byte-range-set = ( byte-range-spec | suffix-byte-range-spec)*N
+byte-range-spec = first-byte-pos "-" [last-byte-pos]
+suffix-byte-range-spec = "-" suffix-length
