@@ -10,6 +10,7 @@
  * provided the above notices are retained, and a notice that the code was
  * modified is included with the above copyright notice.
  */
+
 /* An sprintf implementation that understands cords.  This is probably  */
 /* not terribly portable.  It assumes an ANSI stdarg.h.  It further     */
 /* assumes that I can make copies of va_list variables, and read        */
@@ -43,12 +44,19 @@
 #define CONV_RESULT_LEN 50      /* Maximum length of any        */
                                 /* conversion with default      */
                                 /* width and prec.              */
+#if defined(CPPCHECK)
+# define MACRO_BLKSTMT_BEGIN {
+# define MACRO_BLKSTMT_END   }
+#else
+# define MACRO_BLKSTMT_BEGIN do {
+# define MACRO_BLKSTMT_END   } while (0)
+#endif
 
-#define OUT_OF_MEMORY do { \
+#define OUT_OF_MEMORY MACRO_BLKSTMT_BEGIN \
                         if (CORD_oom_fn != 0) (*CORD_oom_fn)(); \
                         fprintf(stderr, "Out of memory\n"); \
                         abort(); \
-                      } while (0)
+                      MACRO_BLKSTMT_END
 
 static int ec_len(CORD_ec x)
 {

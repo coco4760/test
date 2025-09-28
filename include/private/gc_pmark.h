@@ -74,8 +74,6 @@ GC_EXTERN unsigned GC_n_mark_procs;
 /* Number of mark stack entries to discard on overflow. */
 #define GC_MARK_STACK_DISCARDS (INITIAL_MARK_STACK_SIZE/8)
 
-GC_EXTERN size_t GC_mark_stack_size;
-
 #ifdef PARALLEL_MARK
     /*
      * Allow multiple threads to participate in the marking process.
@@ -85,7 +83,7 @@ GC_EXTERN size_t GC_mark_stack_size;
      *  The initiating threads holds the GC lock, and sets GC_help_wanted.
      *
      *  Other threads:
-     *     1) update helper_count (while holding mark_lock.)
+     *     1) update helper_count (while holding the mark lock).
      *     2) allocate a local mark stack
      *     repeatedly:
      *          3) Steal a global mark stack entry by atomically replacing
@@ -96,7 +94,7 @@ GC_EXTERN size_t GC_mark_stack_size;
      *          6) If necessary, copy local stack to global one,
      *             holding mark lock.
      *    7) Stop when the global mark stack is empty.
-     *    8) decrement helper_count (holding mark_lock).
+     *    8) decrement helper_count (holding the mark lock).
      *
      * This is an experiment to see if we can do something along the lines
      * of the University of Tokyo SGC in a less intrusive, though probably
@@ -225,7 +223,8 @@ GC_INLINE mse * GC_push_obj(ptr_t obj, hdr * hhdr,  mse * mark_stack_top,
 # define TRACE(source, cmd) \
         if (GC_trace_addr != 0 && (ptr_t)(source) == GC_trace_addr) cmd
 # define TRACE_TARGET(target, cmd) \
-        if (GC_trace_addr != 0 && (target) == *(ptr_t *)GC_trace_addr) cmd
+        if (GC_trace_addr != NULL && GC_is_heap_ptr(GC_trace_addr) \
+            && (target) == *(ptr_t *)GC_trace_addr) cmd
 #else
 # define TRACE(source, cmd)
 # define TRACE_TARGET(source, cmd)
@@ -235,7 +234,7 @@ GC_INLINE mse * GC_push_obj(ptr_t obj, hdr * hhdr,  mse * mark_stack_top,
 # define LONG_MULT(hprod, lprod, x, y) \
     do { \
         __asm__ __volatile__("mull %2" : "=a"(lprod), "=d"(hprod) \
-                             : "g"(y), "0"(x)); \
+                             : "r"(y), "0"(x)); \
     } while (0)
 #else
 # if defined(__int64) && !defined(__GNUC__) && !defined(CPPCHECK)
@@ -247,7 +246,7 @@ GC_INLINE mse * GC_push_obj(ptr_t obj, hdr * hhdr,  mse * mark_stack_top,
     do { \
         ULONG_MULT_T prod = (ULONG_MULT_T)(x) * (ULONG_MULT_T)(y); \
         GC_STATIC_ASSERT(sizeof(x) + sizeof(y) <= sizeof(prod)); \
-        hprod = prod >> 32; \
+        hprod = (unsigned32)(prod >> 32); \
         lprod = (unsigned32)prod; \
     } while (0)
 #endif /* !I386 */
@@ -344,13 +343,13 @@ GC_INLINE mse * GC_push_contents_hdr(ptr_t current, mse * mark_stack_top,
       /* beginning of object.  If so, it is valid, and we are fine.     */
       GC_ASSERT(gran_displ <= HBLK_OBJS(hhdr -> hb_sz));
 #   endif /* MARK_BIT_PER_OBJ */
-    TRACE(source, GC_log_printf("GC #%u: passed validity tests\n",
-                                (unsigned)GC_gc_no));
+    TRACE(source, GC_log_printf("GC #%lu: passed validity tests\n",
+                                (unsigned long)GC_gc_no));
     SET_MARK_BIT_EXIT_IF_SET(hhdr, gran_displ); /* contains "break" */
-    TRACE(source, GC_log_printf("GC #%u: previously unmarked\n",
-                                (unsigned)GC_gc_no));
-    TRACE_TARGET(base, GC_log_printf("GC #%u: marking %p from %p instead\n",
-                                     (unsigned)GC_gc_no, (void *)base,
+    TRACE(source, GC_log_printf("GC #%lu: previously unmarked\n",
+                                (unsigned long)GC_gc_no));
+    TRACE_TARGET(base, GC_log_printf("GC #%lu: marking %p from %p instead\n",
+                                     (unsigned long)GC_gc_no, (void *)base,
                                      (void *)source));
     INCR_MARKS(hhdr);
     GC_STORE_BACK_PTR(source, base);
@@ -370,7 +369,7 @@ GC_INLINE mse * GC_push_contents_hdr(ptr_t current, mse * mark_stack_top,
 
 /*
  * Push a single value onto mark stack. Mark from the object pointed to by p.
- * Invoke FIXUP_POINTER(p) before any further processing.
+ * Invoke FIXUP_POINTER() before any further processing.
  * P is considered valid even if it is an interior pointer.
  * Previously marked objects are not pushed.  Hence we make progress even
  * if the mark stack overflows.
@@ -380,14 +379,16 @@ GC_INLINE mse * GC_push_contents_hdr(ptr_t current, mse * mark_stack_top,
     /* Try both the raw version and the fixed up one.   */
 # define GC_PUSH_ONE_STACK(p, source) \
     do { \
+      word pp = (word)(p); \
+      \
       if ((word)(p) >= (word)GC_least_plausible_heap_addr \
           && (word)(p) < (word)GC_greatest_plausible_heap_addr) { \
          PUSH_ONE_CHECKED_STACK(p, source); \
       } \
-      FIXUP_POINTER(p); \
-      if ((word)(p) >= (word)GC_least_plausible_heap_addr \
-          && (word)(p) < (word)GC_greatest_plausible_heap_addr) { \
-         PUSH_ONE_CHECKED_STACK(p, source); \
+      FIXUP_POINTER(pp); \
+      if (pp >= (word)GC_least_plausible_heap_addr \
+          && pp < (word)GC_greatest_plausible_heap_addr) { \
+         PUSH_ONE_CHECKED_STACK(pp, source); \
       } \
     } while (0)
 #else /* !NEED_FIXUP_POINTER */
@@ -442,13 +443,7 @@ GC_INNER mse * GC_mark_from(mse * top, mse * bottom, mse *limit);
     } \
   } while (0)
 
-GC_EXTERN GC_bool GC_mark_stack_too_small;
-                                /* We need a larger mark stack.  May be */
-                                /* set by client supplied mark routines.*/
-
-typedef int mark_state_t;       /* Current state of marking, as follows:*/
-                                /* Used to remember where we are during */
-                                /* concurrent marking.                  */
+                                /* Current state of marking, as follows.*/
 
                                 /* We say something is dirty if it was  */
                                 /* written since the last time we       */
@@ -469,23 +464,23 @@ typedef int mark_state_t;       /* Current state of marking, as follows:*/
                                 /* being pushed.  "I" holds, except     */
                                 /* that grungy roots may point to       */
                                 /* unmarked objects, as may marked      */
-                                /* grungy objects above scan_ptr.       */
+                                /* grungy objects above GC_scan_ptr.    */
 
 #define MS_PUSH_UNCOLLECTABLE 2 /* "I" holds, except that marked        */
-                                /* uncollectible objects above scan_ptr */
-                                /* may point to unmarked objects.       */
-                                /* Roots may point to unmarked objects  */
+                                /* uncollectible objects above          */
+                                /* GC_scan_ptr may point to unmarked    */
+                                /* objects.  Roots may point to         */
+                                /* unmarked objects.                    */
 
 #define MS_ROOTS_PUSHED 3       /* "I" holds, mark stack may be nonempty. */
 
 #define MS_PARTIALLY_INVALID 4  /* "I" may not hold, e.g. because of    */
-                                /* the mark stack overflow.  However    */
-                                /* marked heap objects below scan_ptr   */
-                                /* point to marked or stacked objects.  */
+                                /* the mark stack overflow.  However,   */
+                                /* marked heap objects below            */
+                                /* GC_scan_ptr point to marked or       */
+                                /* stacked objects.                     */
 
 #define MS_INVALID 5            /* "I" may not hold.                    */
-
-GC_EXTERN mark_state_t GC_mark_state;
 
 EXTERN_C_END
 

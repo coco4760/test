@@ -11,7 +11,7 @@
  * modified is included with the above copyright notice.
  */
 
-# include "gc.h"    /* For GC_INIT() only */
+# include "gc.h"
 # include "cord.h"
 
 # include <stdarg.h>
@@ -92,7 +92,7 @@ void test_basics(void)
     CORD_set_pos(p, x, 64*1024-1);
     while(CORD_pos_valid(p)) {
         (void)test_fn(CORD_pos_fetch(p), (void *)(GC_word)13);
-    CORD_next(p);
+        CORD_next(p);
     }
     if (count != 64*1024 + 2) ABORT("Position based iteration failed");
 
@@ -221,15 +221,14 @@ void test_extras(void)
     *(CORD volatile *)&w = CORD_EMPTY;
     *(CORD volatile *)&z = CORD_EMPTY;
     GC_gcollect();
-    GC_invoke_finalizers();
+#   ifndef GC_NO_FINALIZATION
+      GC_invoke_finalizers();
             /* Of course, this does not guarantee the files are closed. */
+#   endif
     if (remove(FNAME1) != 0) {
         /* On some systems, e.g. OS2, this may fail if f1 is still open. */
         /* But we cannot call fclose as it might lead to double close.   */
         fprintf(stderr, "WARNING: remove failed: " FNAME1 "\n");
-    }
-    if (remove(FNAME2) != 0) {
-        fprintf(stderr, "WARNING: remove failed: " FNAME2 "\n");
     }
 }
 
@@ -342,6 +341,11 @@ int main(void)
     test_basics();
     test_extras();
     test_printf();
+
+    GC_gcollect(); /* to close f2 before the file removal */
+    if (remove(FNAME2) != 0) {
+        fprintf(stderr, "WARNING: remove failed: " FNAME2 "\n");
+    }
     CORD_fprintf(stdout, "SUCCEEDED\n");
     return(0);
 }
