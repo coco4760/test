@@ -51,7 +51,7 @@ GC_INNER int GC_key_create_inner(tsd ** key_ptr)
 GC_INNER int GC_setspecific(tsd * key, void * value)
 {
     pthread_t self = pthread_self();
-    int hash_val = HASH(self);
+    unsigned hash_val = HASH(self);
     volatile tse * entry;
 
     GC_ASSERT(I_HOLD_LOCK());
@@ -138,8 +138,7 @@ GC_INNER void * GC_slow_getspecific(tsd * key, word qtid,
                                     tse * volatile * cache_ptr)
 {
     pthread_t self = pthread_self();
-    unsigned hash_val = HASH(self);
-    tse *entry = key->hash[hash_val].p;
+    tse *entry = key->hash[HASH(self)].p;
 
     GC_ASSERT(qtid != INVALID_QTID);
     while (entry != NULL && !THREAD_EQUAL(entry->thread, self)) {
@@ -147,14 +146,12 @@ GC_INNER void * GC_slow_getspecific(tsd * key, word qtid,
     }
     if (entry == NULL) return NULL;
     /* Set cache_entry. */
-    entry -> qtid = (AO_t)qtid;
+    AO_store(&(entry -> qtid), qtid);
         /* It's safe to do this asynchronously.  Either value   */
         /* is safe, though may produce spurious misses.         */
         /* We're replacing one qtid with another one for the    */
         /* same thread.                                         */
-    *cache_ptr = entry;
-        /* Again this is safe since pointer assignments are     */
-        /* presumed atomic, and either pointer is valid.        */
+    AO_store((volatile AO_t *)cache_ptr, (AO_t)entry);
     return TS_REVEAL_PTR(entry -> value);
 }
 

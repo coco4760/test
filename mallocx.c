@@ -3,6 +3,7 @@
  * Copyright (c) 1991-1994 by Xerox Corporation.  All rights reserved.
  * Copyright (c) 1996 by Silicon Graphics.  All rights reserved.
  * Copyright (c) 2000 by Hewlett-Packard Company.  All rights reserved.
+ * Copyright (c) 2009-2021 Ivan Maidanski
  *
  * THIS MATERIAL IS PROVIDED AS IS, WITH ABSOLUTELY NO WARRANTY EXPRESSED
  * OR IMPLIED.  ANY USE IS AT YOUR OWN RISK.
@@ -27,20 +28,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifdef MSWINCE
-# ifndef WIN32_LEAN_AND_MEAN
-#   define WIN32_LEAN_AND_MEAN 1
-# endif
-# define NOSERVICE
-# include <windows.h>
-#else
+#ifndef MSWINCE
 # include <errno.h>
 #endif
 
 /* Some externally visible but unadvertised variables to allow access to */
 /* free lists from inlined allocators without including gc_priv.h        */
 /* or introducing dependencies on internal data structure layouts.       */
-#include "gc_alloc_ptrs.h"
+#include "private/gc_alloc_ptrs.h"
 void ** const GC_objfreelist_ptr = GC_objfreelist;
 void ** const GC_aobjfreelist_ptr = GC_aobjfreelist;
 void ** const GC_uobjfreelist_ptr = GC_uobjfreelist;
@@ -216,7 +211,7 @@ GC_API GC_ATTR_MALLOC void * GC_CALL
     lb_rounded = GRANULES_TO_BYTES(lg);
     n_blocks = OBJ_SZ_TO_BLOCKS(lb_rounded);
     init = GC_obj_kinds[k].ok_init;
-    if (EXPECT(GC_have_errors, FALSE))
+    if (EXPECT(get_have_errors(), FALSE))
       GC_print_all_errors();
     GC_INVOKE_FINALIZERS();
     GC_DBG_COLLECT_AT_MALLOC(lb);
@@ -261,13 +256,13 @@ GC_API GC_ATTR_MALLOC void * GC_CALL
 
 /* Increment GC_bytes_allocd from code that doesn't have direct access  */
 /* to GC_arrays.                                                        */
-GC_API void GC_CALL GC_incr_bytes_allocd(size_t n)
+void GC_CALL GC_incr_bytes_allocd(size_t n)
 {
     GC_bytes_allocd += n;
 }
 
 /* The same for GC_bytes_freed.                         */
-GC_API void GC_CALL GC_incr_bytes_freed(size_t n)
+void GC_CALL GC_incr_bytes_freed(size_t n)
 {
     GC_bytes_freed += n;
 }
@@ -298,7 +293,8 @@ GC_API size_t GC_CALL GC_get_expl_freed_bytes_since_gc(void)
 /* GC_malloc_many or friends to replenish it.  (We do not round up      */
 /* object sizes, since a call indicates the intention to consume many   */
 /* objects of exactly this size.)                                       */
-/* We assume that the size is a multiple of GRANULE_BYTES.              */
+/* We assume that the size is non-zero and a multiple of                */
+/* GRANULE_BYTES, and that it already includes EXTRA_BYTES value.       */
 /* We return the free-list by assigning it to *result, since it is      */
 /* not safe to return, e.g. a linked list of pointer-free objects,      */
 /* since the collector would not retain the entire list if it were      */
@@ -320,8 +316,8 @@ GC_API void GC_CALL GC_generic_malloc_many(size_t lb, int k, void **result)
     /* Currently a single object is always allocated if manual VDB. */
     /* TODO: GC_dirty should be called for each linked object (but  */
     /* the last one) to support multiple objects allocation.        */
-    if (!SMALL_OBJ(lb) || GC_manual_vdb) {
-        op = GC_generic_malloc(lb, k);
+    if (!EXPECT(lb <= MAXOBJBYTES, TRUE) || GC_manual_vdb) {
+        op = GC_generic_malloc(lb - EXTRA_BYTES, k);
         if (EXPECT(0 != op, TRUE))
             obj_link(op) = 0;
         *result = op;
@@ -336,10 +332,10 @@ GC_API void GC_CALL GC_generic_malloc_many(size_t lb, int k, void **result)
     GC_ASSERT(k < MAXOBJKINDS);
     lw = BYTES_TO_WORDS(lb);
     lg = BYTES_TO_GRANULES(lb);
-    if (EXPECT(GC_have_errors, FALSE))
+    if (EXPECT(get_have_errors(), FALSE))
       GC_print_all_errors();
     GC_INVOKE_FINALIZERS();
-    GC_DBG_COLLECT_AT_MALLOC(lb);
+    GC_DBG_COLLECT_AT_MALLOC(lb - EXTRA_BYTES);
     if (!EXPECT(GC_is_initialized, TRUE)) GC_init();
     LOCK();
     /* Do our share of marking work */
@@ -449,7 +445,7 @@ GC_API void GC_CALL GC_generic_malloc_many(size_t lb, int k, void **result)
     /* Next try to allocate a new block worth of objects of this size.  */
     {
         struct hblk *h = GC_allochblk(lb, k, 0);
-        if (h != 0) {
+        if (h /* != NULL */) { /* CPPCHECK */
           if (IS_UNCOLLECTABLE(k)) GC_set_hdr_marks(HDR(h));
           GC_bytes_allocd += HBLKSIZE - HBLKSIZE % lb;
 #         ifdef PARALLEL_MARK
@@ -478,7 +474,7 @@ GC_API void GC_CALL GC_generic_malloc_many(size_t lb, int k, void **result)
 
     /* As a last attempt, try allocating a single object.  Note that    */
     /* this may trigger a collection or expand the heap.                */
-      op = GC_generic_malloc_inner(lb, k);
+      op = GC_generic_malloc_inner(lb - EXTRA_BYTES, k);
       if (0 != op) obj_link(op) = 0;
 
   out:
@@ -541,8 +537,10 @@ GC_API GC_ATTR_MALLOC void * GC_CALL GC_memalign(size_t align, size_t lb)
 /* This one exists largely to redirect posix_memalign for leaks finding. */
 GC_API int GC_CALL GC_posix_memalign(void **memptr, size_t align, size_t lb)
 {
-  /* Check alignment properly.  */
+  void *p;
   size_t align_minus_one = align - 1; /* to workaround a cppcheck warning */
+
+  /* Check alignment properly.  */
   if (align < sizeof(void *) || (align_minus_one & align) != 0) {
 #   ifdef MSWINCE
       return ERROR_INVALID_PARAMETER;
@@ -551,14 +549,16 @@ GC_API int GC_CALL GC_posix_memalign(void **memptr, size_t align, size_t lb)
 #   endif
   }
 
-  if ((*memptr = GC_memalign(align, lb)) == NULL) {
+  p = GC_memalign(align, lb);
+  if (EXPECT(NULL == p, FALSE)) {
 #   ifdef MSWINCE
       return ERROR_NOT_ENOUGH_MEMORY;
 #   else
       return ENOMEM;
 #   endif
   }
-  return 0;
+  *memptr = p;
+  return 0; /* success */
 }
 
 /* provide a version of strdup() that uses the collector to allocate the
@@ -618,15 +618,17 @@ GC_API GC_ATTR_MALLOC char * GC_CALL GC_strndup(const char *str, size_t size)
   }
 #endif /* GC_REQUIRE_WCSDUP */
 
-GC_API void * GC_CALL GC_malloc_stubborn(size_t lb)
-{
-  return GC_malloc(lb);
-}
+#ifndef CPPCHECK
+  GC_API void * GC_CALL GC_malloc_stubborn(size_t lb)
+  {
+    return GC_malloc(lb);
+  }
 
-GC_API void GC_CALL GC_change_stubborn(const void *p GC_ATTR_UNUSED)
-{
-  /* Empty. */
-}
+  GC_API void GC_CALL GC_change_stubborn(const void *p GC_ATTR_UNUSED)
+  {
+    /* Empty. */
+  }
+#endif /* !CPPCHECK */
 
 GC_API void GC_CALL GC_end_stubborn_change(const void *p)
 {

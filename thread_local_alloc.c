@@ -179,10 +179,15 @@ GC_API GC_ATTR_MALLOC void * GC_CALL GC_malloc_kind(size_t bytes, int kind)
     GC_ASSERT(GC_is_initialized);
     GC_ASSERT(GC_is_thread_tsd_valid(tsd));
     granules = ROUNDED_UP_GRANULES(bytes);
+#   if defined(CPPCHECK)
+#     define MALLOC_KIND_PTRFREE_INIT (void*)1
+#   else
+#     define MALLOC_KIND_PTRFREE_INIT NULL
+#   endif
     GC_FAST_MALLOC_GRANS(result, granules,
                          ((GC_tlfs)tsd) -> _freelists[kind], DIRECT_GRANULES,
                          kind, GC_malloc_kind_global(bytes, kind),
-                         (void)(kind == PTRFREE ? NULL
+                         (void)(kind == PTRFREE ? MALLOC_KIND_PTRFREE_INIT
                                                : (obj_link(result) = 0)));
 #   ifdef LOG_ALLOCS
       GC_log_printf("GC_malloc_kind(%lu, %d) returned %p, recent GC #%lu\n",
@@ -226,7 +231,7 @@ GC_API GC_ATTR_MALLOC void * GC_CALL GC_gcj_malloc(size_t bytes,
     void *result;
     void **tiny_fl;
 
-    GC_ASSERT(GC_gcj_malloc_initialized);
+    GC_ASSERT(GC_gcjobjfreelist != NULL);
     tiny_fl = ((GC_tlfs)GC_getspecific(GC_thread_key))->gcj_freelists;
     GC_FAST_MALLOC_GRANS(result, granules, tiny_fl, DIRECT_GRANULES,
                          GC_gcj_kind,
